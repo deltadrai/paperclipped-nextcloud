@@ -30,6 +30,7 @@ mail:
   mail_dir: $DMS_MAIL
   imap: { host: localhost, port: 143, security: none }
   smtp: { host: localhost, port: 587, security: none }
+  probe: { host: 127.0.0.1, port: 18143, security: none }
 shared_mailboxes:
   - { key: contact, address: contact@example.test, label: contact@ (shared) }
 bootstrap: { team_folder: digital workforce, lobby: e2e lobby }

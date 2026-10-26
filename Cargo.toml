@@ -30,7 +30,9 @@ sha2 = "0.10"
 subtle = "2"
 tempfile = "3"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "fs", "time", "signal"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+webpki-roots = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "fs", "time", "signal", "io-util", "net"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4"] }

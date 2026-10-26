@@ -141,3 +141,10 @@ server, outside this tool.
 - **SQLite is not a test database for Nextcloud.** User creation failed intermittently with
   `database is locked` (CardDAV sync) and was reported as OCS 101. The spike now runs
   Nextcloud on PostgreSQL 16, with production's digest.
+- **docker-mailserver applies changes asynchronously; Nextcloud throttles failed logins.**
+  - What CI showed: on a slower GitHub runner, Nextcloud Mail logged in before DMS had loaded
+    the new account. The failed logins tripped Nextcloud's brute-force protection, and every
+    retry got HTTP 429.
+  - The fix: after changing a mailbox password, the server logs in by IMAP itself (plain,
+    implicit TLS or STARTTLS), and only then does Nextcloud Mail use the password. The probe
+    endpoint is `mail.probe` (default `mail.imap`).

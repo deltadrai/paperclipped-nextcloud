@@ -24,6 +24,11 @@ mail:
   # How Nextcloud Mail reaches the mail server. security: ssl | starttls | none
   imap: { host: mail.example.com, port: 993, security: ssl }
   smtp: { host: mail.example.com, port: 465, security: ssl }
+  # Before Nextcloud Mail uses a new mailbox password, this server logs in by IMAP until the
+  # mail server accepts it (docker-mailserver applies changes after a few seconds; failed
+  # logins in Nextcloud would trip its brute-force protection). Defaults to `imap` above.
+  # probe: { host: mail.example.com, port: 993, security: ssl }
+  probe_timeout_secs: 90
 
 # Company mailboxes a worker can be granted. Each one's password is
 # SHARED_MAILBOX_<KEY>_PASSWORD (key upper-cased, '-' becomes '_').

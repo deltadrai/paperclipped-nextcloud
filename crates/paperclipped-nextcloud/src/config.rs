@@ -67,6 +67,13 @@ pub struct MailSection {
     /// How Nextcloud Mail reaches the mail server.
     pub imap: Endpoint,
     pub smtp: Endpoint,
+    /// Where this server checks, by IMAP login, that a changed mailbox password is live before
+    /// Nextcloud Mail uses it. Defaults to `imap`; set it when this server reaches the mail
+    /// server by another address than Nextcloud does.
+    #[serde(default)]
+    pub probe: Option<Endpoint>,
+    #[serde(default = "default_probe_timeout")]
+    pub probe_timeout_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +151,9 @@ fn default_state_dir() -> PathBuf {
 }
 fn default_rate() -> u32 {
     30
+}
+fn default_probe_timeout() -> u64 {
+    90
 }
 fn yes() -> bool {
     true

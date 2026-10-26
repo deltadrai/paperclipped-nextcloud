@@ -9,6 +9,8 @@
 //! Writes replace a file atomically (temp file + rename) while holding the lock files DMS's own
 //! account scripts use, so a concurrent `setup email …` cannot interleave.
 
+pub mod probe;
+
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -34,6 +36,8 @@ const LOCKS: &[&str] = &[
 const STALE_LOCK: Duration = Duration::from_secs(60);
 
 pub struct DmsBackend {
+    /// Waits for DMS to apply a change before callers use the password; see [`probe`].
+    probe: Option<probe::ImapProbe>,
     config_dir: PathBuf,
     /// DMS's `/var/mail`, if mounted; needed only to purge stored mail.
     mail_dir: Option<PathBuf>,
@@ -50,10 +54,17 @@ impl DmsBackend {
             );
         }
         Ok(Self {
+            probe: None,
             config_dir,
             mail_dir,
             lock_poll: Duration::from_secs(1),
         })
+    }
+
+    /// Probe IMAP after each password change until DMS accepts it.
+    pub fn with_probe(mut self, probe: probe::ImapProbe) -> Self {
+        self.probe = Some(probe);
+        self
     }
 
     fn read(&self, file: &str) -> anyhow::Result<String> {
@@ -295,6 +306,13 @@ impl MailBackend for DmsBackend {
         } else {
             Change::Unchanged
         })
+    }
+
+    async fn wait_until_login(&self, address: &str, password: &str) -> anyhow::Result<()> {
+        match &self.probe {
+            Some(p) => p.wait(address, password).await,
+            None => Ok(()),
+        }
     }
 }
 

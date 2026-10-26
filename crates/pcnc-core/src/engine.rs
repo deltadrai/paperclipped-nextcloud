@@ -466,6 +466,9 @@ impl Engine {
             }
             current => {
                 self.mail.set_password(&rec.address, &mailbox_pw).await?;
+                self.mail
+                    .wait_until_login(&rec.address, &mailbox_pw)
+                    .await?;
                 run.step(
                     "mailbox",
                     if current.is_none() {

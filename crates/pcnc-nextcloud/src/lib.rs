@@ -20,32 +20,15 @@ use serde_json::{Value, json};
 pub use client::seg;
 use client::{Auth, Client};
 
-/// How Nextcloud Mail connects to the mail server.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Security {
-    None,
-    /// Implicit TLS (IMAPS 993, SMTPS 465).
-    Ssl,
-    /// STARTTLS (IMAP 143, submission 587).
-    Starttls,
-}
+pub use pcnc_core::backend::{Endpoint, Security};
 
-impl Security {
-    fn mail_app_value(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Ssl => "ssl",
-            Self::Starttls => "tls",
-        }
+/// Nextcloud Mail's names for the security modes.
+fn mail_app_security(s: Security) -> &'static str {
+    match s {
+        Security::None => "none",
+        Security::Ssl => "ssl",
+        Security::Starttls => "tls",
     }
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Endpoint {
-    pub host: String,
-    pub port: u16,
-    pub security: Security,
 }
 
 #[derive(Debug, Clone)]
@@ -127,12 +110,12 @@ impl NextcloudBackend {
             "emailAddress": spec.email,
             "imapHost": self.cfg.imap.host,
             "imapPort": self.cfg.imap.port,
-            "imapSslMode": self.cfg.imap.security.mail_app_value(),
+            "imapSslMode": mail_app_security(self.cfg.imap.security),
             "imapUser": spec.login,
             "imapPassword": spec.password,
             "smtpHost": self.cfg.smtp.host,
             "smtpPort": self.cfg.smtp.port,
-            "smtpSslMode": self.cfg.smtp.security.mail_app_value(),
+            "smtpSslMode": mail_app_security(self.cfg.smtp.security),
             "smtpUser": spec.login,
             "smtpPassword": spec.password,
             "authMethod": "password",

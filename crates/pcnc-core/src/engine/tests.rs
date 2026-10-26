@@ -12,6 +12,7 @@ struct FakeMail {
     boxes: StdMutex<HashMap<String, String>>,
     aliases: HashSet<String>,
     deleted: StdMutex<Vec<(String, bool)>>,
+    waited: StdMutex<Vec<String>>,
 }
 
 #[async_trait]
@@ -29,6 +30,14 @@ impl MailBackend for FakeMail {
         } else {
             Change::Created
         })
+    }
+    async fn wait_until_login(&self, a: &str, p: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.boxes.lock().unwrap().get(a).is_some_and(|x| x == p),
+            "not live"
+        );
+        self.waited.lock().unwrap().push(a.into());
+        Ok(())
     }
     async fn delete(&self, a: &str, purge: bool) -> anyhow::Result<Change> {
         self.deleted.lock().unwrap().push((a.into(), purge));
@@ -329,6 +338,12 @@ async fn create_then_resync_is_all_unchanged() {
         outcomes(&again)
     );
     assert!(again.credentials.is_empty());
+
+    assert_eq!(
+        *e.mail.waited.lock().unwrap(),
+        ["ada@example.test"],
+        "the mailbox password is confirmed live before Nextcloud Mail uses it"
+    );
 
     let insp = e.engine.inspect("agent-1").await.unwrap();
     assert!(insp.checks.iter().all(|c| c.ok), "{:?}", insp.checks);

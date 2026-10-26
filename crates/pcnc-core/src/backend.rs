@@ -14,6 +14,25 @@ pub enum Change {
     Removed,
 }
 
+/// Transport security of a mail endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Security {
+    None,
+    /// Implicit TLS (IMAPS 993, SMTPS 465).
+    Ssl,
+    /// STARTTLS (IMAP 143, submission 587).
+    Starttls,
+}
+
+/// An IMAP or SMTP endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct Endpoint {
+    pub host: String,
+    pub port: u16,
+    pub security: Security,
+}
+
 /// A mail server that hosts the workers' mailboxes.
 #[async_trait]
 pub trait MailBackend: Send + Sync {
@@ -26,6 +45,12 @@ pub trait MailBackend: Send + Sync {
     async fn set_password(&self, address: &str, password: &str) -> anyhow::Result<Change>;
     /// Deletes the mailbox, and its stored mail when `purge_mail` is set.
     async fn delete(&self, address: &str, purge_mail: bool) -> anyhow::Result<Change>;
+    /// Waits until the mail server accepts `password` for `address`. A backend that applies
+    /// changes asynchronously must implement this: Nextcloud Mail logs in right after, and
+    /// failed logins there trip Nextcloud's brute-force protection.
+    async fn wait_until_login(&self, _address: &str, _password: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 /// A Nextcloud user as the sub-admin sees it.

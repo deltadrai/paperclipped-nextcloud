@@ -90,10 +90,21 @@ fn runtime(cfg: &Config) -> anyhow::Result<Runtime> {
     )?);
     let sealer = Sealer::from_base64(&env("PCNC_STATE_KEY")?)?;
     let mail: Arc<dyn pcnc_core::backend::MailBackend> = match cfg.mail.backend {
-        config::MailBackendKind::DockerMailserver => Arc::new(pcnc_dms::DmsBackend::new(
-            &cfg.mail.config_dir,
-            cfg.mail.mail_dir.clone(),
-        )?),
+        config::MailBackendKind::DockerMailserver => {
+            let probe = pcnc_dms::probe::ImapProbe {
+                endpoint: cfg
+                    .mail
+                    .probe
+                    .clone()
+                    .unwrap_or_else(|| cfg.mail.imap.clone()),
+                timeout: std::time::Duration::from_secs(cfg.mail.probe_timeout_secs),
+                interval: std::time::Duration::from_secs(1),
+            };
+            Arc::new(
+                pcnc_dms::DmsBackend::new(&cfg.mail.config_dir, cfg.mail.mail_dir.clone())?
+                    .with_probe(probe),
+            )
+        }
     };
     let cloud = Arc::new(pcnc_nextcloud::NextcloudBackend::new(
         cfg.nextcloud_config()?,
