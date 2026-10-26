@@ -37,8 +37,9 @@ jobs:
           docker push "$image:${GITHUB_REF_NAME}-${{ matrix.arch }}"
 
   npm:
-    # Publishes the Paperclip plugin with provenance. Needs the repository secret NPM_TOKEN
-    # (or npm trusted publishing configured for this repository and workflow).
+    # Publishes the Paperclip plugin through npm trusted publishing (OIDC): no token, and
+    # provenance is automatic for a public repository. Configure the trusted publisher on
+    # npmjs.com (package Settings → Trusted publishing → GitHub Actions, workflow release.yml).
     runs-on: ubuntu-latest
     permissions: { contents: read, id-token: write }
     defaults: { run: { working-directory: plugin } }
@@ -46,11 +47,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24, registry-url: "https://registry.npmjs.org" }
+      - name: npm supports trusted publishing (>= 11.5.1)
+        run: |
+          npm --version
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)"
       - run: npm ci
       - name: Versions match the tag
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
-      - run: npm publish --provenance --access public
-        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }
+      - name: Publish unless this version is already on npm
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          if npm view "paperclipped-nextcloud@$v" version >/dev/null 2>&1; then
+            echo "paperclipped-nextcloud@$v is already published; skipping"
+          else
+            npm publish --access public
+          fi
 
   publish:
     needs: build
