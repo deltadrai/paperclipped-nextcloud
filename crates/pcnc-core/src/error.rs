@@ -32,6 +32,15 @@ impl EngineError {
         }
     }
 
+    /// Human-readable message without the code (API responses carry the code separately).
+    pub fn message(&self) -> String {
+        match self {
+            Self::BadRequest { message, .. } | Self::Conflict { message, .. } => message.clone(),
+            Self::NotFound => "identity not found".into(),
+            Self::Backend(e) => format!("{e:#}"),
+        }
+    }
+
     /// Stable machine-readable code for API responses.
     pub fn code(&self) -> &'static str {
         match self {

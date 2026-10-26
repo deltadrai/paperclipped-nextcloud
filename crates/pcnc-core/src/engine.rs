@@ -128,6 +128,15 @@ impl Engine {
             .transpose()
     }
 
+    /// Like [`Engine::open`], but a value that cannot be opened (lost or replaced state key)
+    /// counts as absent: disabling an identity must never depend on the key.
+    fn open_for_teardown(&self, rec: &IdentityRecord, field: &str) -> Option<String> {
+        self.open(rec, field).unwrap_or_else(|e| {
+            tracing::warn!(identity = %rec.external_id, field, error = %e, "cannot open a sealed value; continuing teardown without it");
+            None
+        })
+    }
+
     fn seal(&self, rec: &mut IdentityRecord, field: &str, value: &str) -> anyhow::Result<()> {
         let sealed = Some(
             self.sealer
@@ -578,8 +587,9 @@ impl Engine {
 
         match self.cloud.get_user(&rec.name).await? {
             Some(user) if user.enabled => {
-                // Mail accounts can only be managed while the user can still log in.
-                if let Some(mgmt) = self.open(&rec, "mgmt")? {
+                // Mail accounts can only be managed while the user can still log in. Teardown
+                // must not depend on the state key: if it cannot open the token, skip this.
+                if let Some(mgmt) = self.open_for_teardown(&rec, "mgmt") {
                     if self.cloud.app_password_valid(&rec.name, &mgmt).await? {
                         let accounts = self.cloud.list_mail_accounts(&rec.name, &mgmt).await?;
                         for mb in &self.cfg.shared_mailboxes {
@@ -602,15 +612,25 @@ impl Engine {
             None => run.step("nextcloud_user", Outcome::Unchanged),
         }
 
-        if let Some(mailbox_pw) = self.open(&rec, "mailbox")? {
-            if self.mail.verify(&rec.address, &mailbox_pw).await? == Some(true) {
+        match self.open_for_teardown(&rec, "mailbox") {
+            Some(mailbox_pw) => {
+                if self.mail.verify(&rec.address, &mailbox_pw).await? == Some(true) {
+                    self.mail
+                        .set_password(&rec.address, &generate_password())
+                        .await?;
+                    run.step("mailbox", Outcome::Updated);
+                } else {
+                    run.step("mailbox", Outcome::Unchanged);
+                }
+            }
+            // Unknown password: lock unconditionally.
+            None if self.mail.verify(&rec.address, "").await?.is_some() => {
                 self.mail
                     .set_password(&rec.address, &generate_password())
                     .await?;
                 run.step("mailbox", Outcome::Updated);
-            } else {
-                run.step("mailbox", Outcome::Unchanged);
             }
+            None => {}
         }
 
         rec.state = IdentityState::Disabled;

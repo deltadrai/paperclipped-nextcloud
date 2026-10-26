@@ -653,3 +653,31 @@ async fn reshare_updates_granted_workers_only() {
     let r = e.engine.reshare("contact").await.unwrap();
     assert_eq!(r, [("a1".to_string(), Outcome::Updated)]);
 }
+
+#[tokio::test]
+async fn disable_and_purge_work_without_the_state_key() {
+    let e = env();
+    e.engine
+        .provision("agent-1", &req("ada", &["contact"]))
+        .await
+        .unwrap();
+    // The state key was replaced: every sealed value is now unreadable.
+    let mut rec = e.reg.get("agent-1").unwrap().unwrap();
+    let other =
+        Sealer::from_base64(&base64::engine::general_purpose::STANDARD.encode([3u8; 32])).unwrap();
+    rec.mgmt_token = Some(other.seal("agent-1/mgmt", "x").unwrap());
+    rec.mailbox_password = Some(other.seal("agent-1/mailbox", "x").unwrap());
+    e.reg.put(&rec).unwrap();
+    let before = e.mail.boxes.lock().unwrap()["ada@example.test"].clone();
+
+    let r = e.engine.disable("agent-1").await.unwrap();
+    assert_eq!(r.identity.unwrap().state, IdentityState::Disabled);
+    assert!(!e.cloud.0.lock().unwrap().users["ada"].0.enabled);
+    assert_ne!(
+        e.mail.boxes.lock().unwrap()["ada@example.test"],
+        before,
+        "mailbox locked anyway"
+    );
+    e.engine.purge("agent-1").await.unwrap();
+    assert!(e.reg.get("agent-1").unwrap().is_none());
+}

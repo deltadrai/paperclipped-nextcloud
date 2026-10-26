@@ -4,7 +4,7 @@
 # (local_trusted). Idempotent; down.sh removes it. Images are pinned to the digests deployed on
 # deltadrai's nodes on 2026-10-26. Everything inside the pod talks over localhost.
 #
-# Published on 127.0.0.1: Nextcloud :18080, MCP :18000, IMAP :18143. Paperclip binds loopback inside the pod.
+# Published on 127.0.0.1: Nextcloud :18080, MCP :18000, IMAP :18143, Paperclip UI :13100. Paperclip binds loopback inside the pod.
 set -euo pipefail
 POD=pcnc-spike
 DMS_IMG=ghcr.io/docker-mailserver/docker-mailserver@sha256:a69ddc47bbcd085a2a6f23fd31f371d54b2f8495f7266a7803a3e272e049556b
@@ -16,7 +16,7 @@ BUSYBOX=docker.io/library/busybox:latest
 NC_ADMIN_PW=${NC_ADMIN_PW:-spike-admin-pw}
 
 podman pod exists "$POD" || podman pod create --name "$POD" --hostname mail.example.test \
-  -p 127.0.0.1:18080:80 -p 127.0.0.1:18000:8000 -p 127.0.0.1:18143:143
+  -p 127.0.0.1:18080:80 -p 127.0.0.1:18000:8000 -p 127.0.0.1:18143:143 -p 127.0.0.1:13100:3101
 
 run() { local name=$1; shift; podman container exists "$POD-$name" || podman run -d --pod "$POD" --name "$POD-$name" "$@"; }
 
@@ -77,5 +77,9 @@ run mcp \
   -e PAPERCLIP_DEPLOYMENT_MODE=local_trusted -e HOST=127.0.0.1 -e PORT=3100 \
   -v pcnc-spike-pc:/paperclip \
   "$PC_IMG"
+
+# Paperclip's local_trusted mode binds loopback only; a published port arrives on the pod's
+# interface. This sidecar relays the UI for a browser on the host.
+[[ -n ${SKIP_PAPERCLIP:-} ]] || run ui docker.io/alpine/socat:latest TCP-LISTEN:3101,fork,reuseaddr TCP:127.0.0.1:3100
 
 podman pod ps --filter name="$POD"

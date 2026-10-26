@@ -17,7 +17,7 @@ It has two parts:
 | Part | What it is |
 |---|---|
 | **Server** (`paperclipped-nextcloud`, Rust) | Runs next to your mail server and holds the privileged access. HTTP API and CLI. |
-| **Paperclip plugin** (npm `paperclipped-nextcloud`, *in development*) | An **Identity** tab on each agent's page: create, delete (disable), re-enable, purge. |
+| **Paperclip plugin** (npm `paperclipped-nextcloud`, [`plugin/`](plugin/README.md)) | A *Nextcloud identities* page (and, on newer Paperclip releases, a tab on each agent's page): create, delete (disable), re-enable, purge; masked credentials with copy; blocks deleting an agent until its ID is purged. |
 
 ## Requirements
 
@@ -109,9 +109,11 @@ needs `Authorization: Bearer $PCNC_API_TOKEN`.
 ## Development
 
 ```sh
-cargo test                      # unit tests (engine against in-memory fakes, DMS files, registry)
-spike/up.sh                     # local pod: DMS, Nextcloud + Mail/Talk/Team folders, MCP, Paperclip
-tests/e2e/spike-e2e.sh          # end-to-end against that pod
+cargo test                          # server unit tests (engine against in-memory fakes, DMS files, registry, IMAP probe)
+(cd plugin && npm ci && npm test)   # plugin unit tests (Node 24)
+spike/up.sh                         # local pod: DMS, Nextcloud + Mail/Talk/Team folders, MCP, Paperclip (UI on 127.0.0.1:13100)
+tests/e2e/spike-e2e.sh              # server end-to-end against that pod
+tests/plugin/spike-plugin-e2e.sh    # plugin end-to-end: installs the packed plugin into the pod's Paperclip
 spike/down.sh
 ```
 

@@ -65,10 +65,7 @@ impl From<EngineError> for ApiError {
                 StatusCode::BAD_GATEWAY
             }
         };
-        let message = match &e {
-            EngineError::Backend(err) => format!("{err:#}"),
-            other => other.to_string(),
-        };
+        let message = e.message();
         ApiError(status, e.code(), message)
     }
 }

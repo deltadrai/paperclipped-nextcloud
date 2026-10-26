@@ -16,6 +16,20 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
+  plugin:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: plugin } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: plugin/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm pack --dry-run
+
+  # tests/plugin/spike-plugin-e2e.sh needs the Paperclip image (8.5 GB): run it locally.
   e2e:
     # The full lifecycle against docker-mailserver, Nextcloud (+ Mail, Talk, Team folders) and
     # nextcloud-mcp-server in one rootless podman pod.
