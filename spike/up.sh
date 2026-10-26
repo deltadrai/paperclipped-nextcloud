@@ -28,11 +28,20 @@ podman volume exists pcnc-spike-dms-config || {
       "$(mkpasswd -m sha512 postmaster-spike-pw)" "$(mkpasswd -m sha512 contact-spike-pw)" > /c/postfix-accounts.cf'
 }
 run dms \
-  -e PERMIT_DOCKER=none -e SSL_TYPE= -e POSTFIX_INET_PROTOCOLS=ipv4 -e SPOOF_PROTECTION=1 \
+  -e PERMIT_DOCKER=none -e NETWORK_INTERFACE=lo -e SSL_TYPE= -e POSTFIX_INET_PROTOCOLS=ipv4 -e SPOOF_PROTECTION=1 \
   -e ENABLE_RSPAMD=0 -e ENABLE_CLAMAV=0 -e ENABLE_FAIL2BAN=0 -e ENABLE_POSTGREY=0 \
   -e ENABLE_AMAVIS=0 -e ENABLE_SPAMASSASSIN=0 -e ENABLE_OPENDKIM=0 -e ENABLE_OPENDMARC=0 \
   -v pcnc-spike-dms-config:/tmp/docker-mailserver -v pcnc-spike-dms-mail:/var/mail \
   "$DMS_IMG"
+
+# NETWORK_INTERFACE=lo as in production: DMS cannot detect slirp4netns's tap0 (podman 4.x).
+echo "waiting for docker-mailserver…"
+for _ in $(seq 60); do
+  podman exec "$POD-dms" doveadm auth test postmaster@example.test postmaster-spike-pw >/dev/null 2>&1 && break
+  sleep 3
+done
+podman exec "$POD-dms" doveadm auth test postmaster@example.test postmaster-spike-pw >/dev/null 2>&1 \
+  || { podman logs --tail 40 "$POD-dms" >&2; echo "docker-mailserver did not come up" >&2; exit 1; }
 
 run db -e POSTGRES_DB=nextcloud -e POSTGRES_USER=nextcloud -e POSTGRES_PASSWORD=spike-db-pw \
   -v pcnc-spike-db:/var/lib/postgresql/data "$PG_IMG"
