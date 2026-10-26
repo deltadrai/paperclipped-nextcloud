@@ -1,0 +1,48 @@
+# paperclipped-nextcloud configuration. Secrets come from the environment; see the README.
+
+# Mail domain of the digital workers: name@domain.
+domain: example.com
+# Names no worker may take, on top of the built-in list (postmaster, abuse, admin, …) and the
+# local parts of the shared mailboxes below.
+reserved_names: []
+
+nextcloud:
+  url: https://cloud.example.com
+  # Created by `paperclipped-nextcloud bootstrap`; its login password is
+  # NEXTCLOUD_SUBADMIN_PASSWORD. Exempt it from enforced two-factor authentication.
+  subadmin_user: workforce-provisioner
+  group: digital workforce
+  quota: 5 GB
+
+mail:
+  backend: docker-mailserver
+  # docker-mailserver's config volume (/tmp/docker-mailserver inside DMS), mounted read-write.
+  config_dir: /dms-config
+  # docker-mailserver's mail volume (/var/mail inside DMS). Optional: only purge needs it.
+  # mail_dir: /dms-mail
+  purge_mail: true
+  # How Nextcloud Mail reaches the mail server. security: ssl | starttls | none
+  imap: { host: mail.example.com, port: 993, security: ssl }
+  smtp: { host: mail.example.com, port: 465, security: ssl }
+
+# Company mailboxes a worker can be granted. Each one's password is
+# SHARED_MAILBOX_<KEY>_PASSWORD (key upper-cased, '-' becomes '_').
+shared_mailboxes:
+  - key: contact
+    address: contact@example.com
+    label: contact@example.com
+
+bootstrap:
+  # Created once by `bootstrap`; renaming them in Nextcloud later is fine.
+  team_folder: digital workforce
+  lobby: digital workforce lobby
+
+mcp:
+  # The nextcloud-mcp-server (MCP_DEPLOYMENT_MODE=multi_user_basic) agents use. Shown to the
+  # Paperclip plugin so it can tell the admin how to connect an agent.
+  url: http://mcp.internal.example:8000/mcp
+
+server:
+  listen: 127.0.0.1:8091
+  state_dir: /var/lib/paperclipped-nextcloud
+  rate_limit_per_minute: 30

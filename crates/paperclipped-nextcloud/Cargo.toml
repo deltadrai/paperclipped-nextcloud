@@ -1,0 +1,27 @@
+[package]
+name = "paperclipped-nextcloud"
+description = "Provision mail + Nextcloud identities for Paperclip agents (digital workers)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pcnc-core.workspace = true
+pcnc-dms.workspace = true
+pcnc-nextcloud.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+subtle.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

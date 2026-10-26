@@ -1,0 +1,34 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions: { contents: read }
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "clippy, rustfmt" }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  e2e:
+    # The full lifecycle against docker-mailserver, Nextcloud (+ Mail, Talk, Team folders) and
+    # nextcloud-mcp-server in one rootless podman pod.
+    runs-on: ubuntu-24.04
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y podman jq
+      - run: spike/up.sh
+        env: { SKIP_PAPERCLIP: "1" }
+      - run: tests/e2e/spike-e2e.sh
+      - if: failure()
+        run: |
+          for c in dms nc mcp; do echo "== $c"; podman logs --tail 80 pcnc-spike-$c || true; done
