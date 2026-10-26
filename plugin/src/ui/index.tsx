@@ -82,10 +82,68 @@ function Button(props: { onClick: () => void; children: ReactNode; variant?: Var
   );
 }
 
-function Card(props: { title: string; children: ReactNode; tone?: "danger" }) {
+// Lucide icons (ISC), the set Paperclip itself uses. All are drawn in `currentColor`, so they
+// follow Paperclip's light and dark themes. Not the Nextcloud logo: Nextcloud's trademark
+// guidelines allow it only as a link to nextcloud.com.
+const ICONS = {
+  copy: <><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></>,
+  rotate: <><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></>,
+  trash: <><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><path d="M10 11v6" /><path d="M14 11v6" /></>,
+  userPlus: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6" /><path d="M22 11h-6" /></>,
+  undo: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></>,
+  check: <path d="M20 6 9 17l-5-5" />,
+  manage: <><path d="M20 7h-9" /><path d="M14 17H5" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></>,
+  close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+  cloud: <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />,
+};
+
+function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof ICONS; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={`shrink-0 ${className}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+/** Icon-only button; the label is its tooltip and accessible name, as in Paperclip. */
+function IconButton(props: { icon: keyof typeof ICONS; label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-label={props.label}
+      title={props.label}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+    >
+      <Icon name={props.icon} />
+    </button>
+  );
+}
+
+/** A value that copies on click, like Paperclip's own keys and hashes. */
+function CopyValue(props: { value: string; label: string; onCopy: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Copy ${props.label}`}
+      title={`Copy ${props.label}`}
+      onClick={props.onCopy}
+      className="inline-flex cursor-copy items-center gap-1.5 rounded bg-muted px-1.5 py-0.5 font-mono text-[13px] text-foreground/90 transition-colors hover:text-foreground"
+    >
+      <span>{props.value}</span>
+      <Icon name="copy" className="h-3.5 w-3.5 opacity-60" />
+    </button>
+  );
+}
+
+function Card(props: { title: string; children: ReactNode; tone?: "danger"; action?: ReactNode }) {
   return (
     <section className={`rounded-lg border p-4 ${props.tone === "danger" ? "border-destructive/40" : "border-border"}`}>
-      <h3 className="mb-3 text-sm font-semibold">{props.title}</h3>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{props.title}</h3>
+        {props.action}
+      </div>
       <div className="flex flex-col gap-3">{props.children}</div>
     </section>
   );
@@ -132,15 +190,11 @@ export function IdentitiesSidebarLink(_: PluginSidebarProps) {
     <a
       {...nav.linkProps(`/${PAGE_ROUTE}`)}
       aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors ${
-        active ? "bg-accent text-foreground" : "text-foreground/80 hover:bg-accent/50 hover:text-foreground"
+      className={`mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-(length:--text-compact) font-medium transition-colors pointer-coarse:py-1 ${
+        active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
       }`}
     >
-      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true">
-        <path d="M7 18a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17 9.5a3.75 3.75 0 0 1 .5 7.47V17" />
-        <circle cx="12" cy="15" r="2.2" />
-        <path d="M8.5 21a3.5 3.5 0 0 1 7 0" />
-      </svg>
+      <Icon name="cloud" />
       <span className="flex-1 truncate">Nextcloud identities</span>
     </a>
   );
@@ -158,7 +212,10 @@ export function IdentitiesPage({ context }: PluginPageProps) {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
       <header>
-        <h1 className="text-lg font-semibold">Nextcloud identities</h1>
+        <h1 className="flex items-center gap-2 text-lg font-semibold">
+          <Icon name="cloud" className="h-5 w-5" />
+          Nextcloud identities
+        </h1>
         <p className={muted}>
           Agents with their own Nextcloud user{data.info ? ` in the group "${data.info.group}"` : ""}, mailbox and Nextcloud MCP access.
         </p>
@@ -189,7 +246,11 @@ export function IdentitiesPage({ context }: PluginPageProps) {
                   <StateBadge identity={a.identity} pending={a.pending} />
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <Button onClick={() => setSelected(selected === a.id ? null : a.id)}>{selected === a.id ? "Close" : "Manage"}</Button>
+                  <IconButton
+                    icon={selected === a.id ? "close" : "manage"}
+                    label={selected === a.id ? "Close" : `Manage the Nextcloud ID of ${a.name}`}
+                    onClick={() => setSelected(selected === a.id ? null : a.id)}
+                  />
                 </td>
               </tr>
             ))}
@@ -344,6 +405,7 @@ function CreateForm(props: { data: IdentityData; busy: boolean; onCreate: (p: Re
       )}
       <div>
         <Button variant="primary" disabled={props.busy || !name || !displayName} onClick={() => props.onCreate({ name, displayName, sharedMailboxes: shared })}>
+          <Icon name="userPlus" />
           Create Nextcloud ID
         </Button>
       </div>
@@ -351,22 +413,13 @@ function CreateForm(props: { data: IdentityData; busy: boolean; onCreate: (p: Re
   );
 }
 
-function Secret(props: { label: string; hint?: string; onCopy: () => void }) {
+function Secret(props: { label: string; copyLabel: string; hint?: string; onCopy: () => void }) {
   return (
     <Row label={props.label}>
       {props.hint ? (
-        <>
-          <code className={`rounded bg-muted px-1.5 py-0.5 ${mono}`}>{props.hint}</code>
-          <Button onClick={props.onCopy} title="Copy to clipboard">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <rect x="9" y="9" width="11" height="11" rx="2" />
-              <path d="M5 15V6a2 2 0 0 1 2-2h9" />
-            </svg>
-            Copy
-          </Button>
-        </>
+        <CopyValue value={props.hint} label={props.copyLabel} onCopy={props.onCopy} />
       ) : (
-        <span className={muted}>not stored. Use "Rotate credentials" to get a new one</span>
+        <span className={muted}>not stored. Rotate the credentials to get a new one</span>
       )}
     </Row>
   );
@@ -403,6 +456,7 @@ function ActiveCards(props: {
             <SharedMailboxPicker info={data.info} value={shared} onChange={setShared} disabled={busy} />
             {changed && (
               <Button variant="primary" disabled={busy} onClick={() => run("provision", { name: id.name, displayName: id.displayName, sharedMailboxes: shared })}>
+                <Icon name="check" />
                 Save
               </Button>
             )}
@@ -410,15 +464,19 @@ function ActiveCards(props: {
         )}
       </Card>
 
-      <Card title="Credentials">
-        <Secret label="Nextcloud login password" hint={c.nextcloudLoginPassword} onCopy={() => copy("nextcloudLoginPassword", "Login password")} />
-        <Secret label="MCP app password" hint={c.mcpAppPassword} onCopy={() => copy("mcpAppPassword", "MCP app password")} />
-        <div className="flex flex-wrap items-center gap-3">
-          <Button disabled={busy} onClick={() => run("rotate")}>
-            Rotate credentials
-          </Button>
-          <span className={muted}>New login password and MCP app password; the old MCP password stops working.</span>
-        </div>
+      <Card
+        title="Credentials"
+        action={
+          <IconButton
+            icon="rotate"
+            label="Rotate credentials: new login password and MCP app password; the old MCP password stops working"
+            disabled={busy}
+            onClick={() => void run("rotate")}
+          />
+        }
+      >
+        <Secret label="Nextcloud login password" copyLabel="Nextcloud login password" hint={c.nextcloudLoginPassword} onCopy={() => copy("nextcloudLoginPassword", "Login password")} />
+        <Secret label="MCP app password" copyLabel="MCP app password" hint={c.mcpAppPassword} onCopy={() => copy("mcpAppPassword", "MCP app password")} />
       </Card>
 
       <Card title="Connect Nextcloud MCP">
@@ -427,17 +485,12 @@ function ActiveCards(props: {
         </p>
         <Row label="Server URL">
           {data.info?.mcpUrl ? (
-            <>
-              <code className={`rounded bg-muted px-1.5 py-0.5 ${mono}`}>{data.info.mcpUrl}</code>
-              <Button onClick={() => void copyTextToClipboard(data.info!.mcpUrl!)} title="Copy to clipboard">
-                Copy
-              </Button>
-            </>
+            <CopyValue value={data.info.mcpUrl} label="MCP server URL" onCopy={() => void copyTextToClipboard(data.info!.mcpUrl!)} />
           ) : (
             <span className={muted}>not set in the server's config (mcp.url)</span>
           )}
         </Row>
-        <Secret label="Authorization header" hint={c.mcpAuthorization} onCopy={() => copy("mcpAuthorization", "Authorization header")} />
+        <Secret label="Authorization header" copyLabel="Authorization header" hint={c.mcpAuthorization} onCopy={() => copy("mcpAuthorization", "Authorization header")} />
         <ol className={`list-decimal pl-5 ${muted}`}>
           <li>Connectors → Custom remote MCP: paste the server URL.</li>
           <li>
@@ -463,6 +516,7 @@ function ActiveCards(props: {
                 void run("disable");
               }}
             >
+              <Icon name="trash" />
               Yes, delete (disable) {id.nextcloudUser}
             </Button>
             <Button onClick={() => setConfirm(false)}>Cancel</Button>
@@ -470,6 +524,7 @@ function ActiveCards(props: {
         ) : (
           <div>
             <Button variant="danger" disabled={busy} onClick={() => setConfirm(true)}>
+              <Icon name="trash" />
               Delete Nextcloud ID
             </Button>
           </div>
@@ -489,6 +544,7 @@ function DisabledCard(props: { identity: Identity; busy: boolean; onEnable: () =
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="primary" disabled={props.busy} onClick={props.onEnable}>
+          <Icon name="undo" />
           Re-enable
         </Button>
         <span className={muted}>Restores the user, mailbox and shared mailboxes with the existing credentials.</span>
@@ -496,6 +552,7 @@ function DisabledCard(props: { identity: Identity; busy: boolean; onEnable: () =
       <div className="flex flex-wrap items-center gap-3">
         <input className={input} placeholder={`type ${id.nextcloudUser} to purge`} value={typed} onChange={(e) => setTyped(e.target.value)} />
         <Button variant="danger" disabled={props.busy || typed !== id.nextcloudUser} onClick={props.onPurge}>
+          <Icon name="trash" />
           Purge permanently
         </Button>
       </div>

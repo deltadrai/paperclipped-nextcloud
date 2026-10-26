@@ -86,7 +86,7 @@ The images use the digests deployed on 2026-10-26.
   share delete` (permissions 31). A new group member sees the folder in their WebDAV root.
 - Both need admin rights, so they belong to `bootstrap` only. Nothing is done per worker.
 
-## (f) Shared mailboxes on stratobuntu (`info@`, `office@`): ANSWERED
+## (f) Shared mailboxes in the target deployment (`info@`, `office@`): ANSWERED
 
 Answered by the admin: both are **aliases**, not mailboxes. Only `contact@` can be shared. An
 alias cannot be shared as a mailbox; turning one into a mailbox is an admin step on the mail

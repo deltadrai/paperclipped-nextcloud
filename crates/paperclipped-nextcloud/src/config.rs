@@ -20,7 +20,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// Mail domain of the workers, e.g. `deltadr.ai`.
+    /// Mail domain of the workers, e.g. `example.com`.
     pub domain: String,
     #[serde(default)]
     pub reserved_names: Vec<String>,

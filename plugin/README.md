@@ -96,6 +96,12 @@ agent lifecycle: during `cleaning_up` it waits until the agent's ID is purged.
 | paperclipped-nextcloud server | 0.1.x |
 | Node (inside Paperclip) | ≥ 24.11 |
 
+## Credits and trademarks
+
+- Icons: [Lucide](https://lucide.dev) (ISC), the set Paperclip uses.
+- Nextcloud is a trademark of Nextcloud GmbH. This project is not affiliated with or endorsed by
+  Nextcloud GmbH or Paperclip, and does not use the Nextcloud logo.
+
 ## License
 
 MIT
