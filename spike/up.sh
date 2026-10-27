@@ -73,8 +73,11 @@ run mcp \
   "$MCP_IMG" --transport streamable-http --port 8000 --log-level info
 
 # SKIP_PAPERCLIP=1: the server's tests do not need Paperclip (a large image).
+# The signing secret lets "ask first" tool policies issue approvals; without it Paperclip
+# refuses those calls outright. A fixed test-only value.
 [[ -n ${SKIP_PAPERCLIP:-} ]] || run pc \
   -e PAPERCLIP_DEPLOYMENT_MODE=local_trusted -e HOST=127.0.0.1 -e PORT=3100 \
+  -e PAPERCLIP_TOOL_ACTION_SIGNING_SECRET=spike-tool-action-signing-secret-0123456789 \
   -v pcnc-spike-pc:/paperclip \
   "$PC_IMG"
 

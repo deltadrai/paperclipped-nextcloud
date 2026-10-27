@@ -148,3 +148,26 @@ server, outside this tool.
   - The fix: after changing a mailbox password, the server logs in by IMAP itself (plain,
     implicit TLS or STARTTLS), and only then does Nextcloud Mail use the password. The probe
     endpoint is `mail.probe` (default `mail.imap`).
+
+## Found while building the automatic MCP connection (plugin 0.2.0, 2026-10-27)
+
+- **Plugins cannot manage tool connections; signed-in users can.** The panel drives Paperclip's
+  REST API in the user's browser session (same origin, so the CSRF guard accepts it). The recipe
+  is in `plugin/src/ui/mcp-connection.ts`.
+- **`config.mcpSessionRequired: true` is required.** Without it the gateway sends a
+  session-less `tools/call` and nextcloud-mcp-server answers 400 "Missing session ID".
+- **The credential must sit on the connection's grant** (`credentialSecretRefs` with
+  `configPath` equal to the header name), not only in `credentialRefs`.
+- **Deleting a connection archives its tool application, which keeps its name.** Connecting the
+  same user again must reuse that application (`applicationId`), or the name collides.
+- **"Ask first" needs `PAPERCLIP_TOOL_ACTION_SIGNING_SECRET`.** Without it, Paperclip refuses
+  ask-first tool calls outright (`signing_secret_unconfigured`). The spike sets a test value.
+- **Paperclip refuses tool calls for terminated agents.** During `cleaning_up` only the ID and
+  its connection are left to clean up.
+- **Secret resolutions add up.** Panel loads, the connection sync's reveal and the actions each
+  resolve secrets; the plugin's e2e hit the 30-per-minute limit. The worker now keeps resolved
+  values for a minute.
+- **Changing the plugin's credential key makes stored credentials unreadable.** The plugin says
+  so and asks for a credential rotation.
+- **New connections grant the credential to "any human in the company".** Paperclip's default;
+  agents get access only as granted (here: the one agent).

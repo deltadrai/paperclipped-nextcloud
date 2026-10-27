@@ -1,7 +1,7 @@
 import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
 
 export const PLUGIN_ID = "deltadrai.paperclipped-nextcloud";
-export const PLUGIN_VERSION = "0.1.1";
+export const PLUGIN_VERSION = "0.2.0";
 
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_ID,
@@ -9,7 +9,7 @@ const manifest: PaperclipPluginManifestV1 = {
   version: PLUGIN_VERSION,
   displayName: "Nextcloud identity",
   description:
-    "Gives an agent its own Nextcloud user, mailbox and Nextcloud MCP access through a paperclipped-nextcloud server.",
+    "Gives an agent its own Nextcloud user and mailbox through a paperclipped-nextcloud server, and connects it to the Nextcloud MCP server as that user.",
   author: "deltadrai",
   categories: ["connector", "ui"],
   capabilities: [

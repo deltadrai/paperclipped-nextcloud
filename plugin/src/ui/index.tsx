@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   copyTextToClipboard,
   useHostNavigation,
@@ -9,6 +9,8 @@ import {
   type PluginPageProps,
   type PluginSidebarProps,
 } from "@paperclipai/plugin-sdk/ui";
+
+import { agentState, removeConnection, restApi, sync, type Bridge, type ConnectionRecord, type SyncResult } from "./mcp-connection.js";
 
 // Styling uses the host's Tailwind classes: plugin UI runs same-origin inside Paperclip.
 
@@ -44,13 +46,15 @@ interface IdentityData {
   info?: Info;
   identity?: Identity | null;
   credentials: Hints;
+  credentialsUpdatedAt: string | null;
+  connection: ConnectionRecord | null;
 }
 
 interface OverviewData {
   configured: boolean;
   error: string | null;
   info?: Info;
-  agents: { id: string; name: string; status: string; identity: Identity | null; pending: { op: string } | null }[];
+  agents: { id: string; name: string; status: string; identity: Identity | null; pending: { op: string } | null; mcpConnected: boolean }[];
 }
 
 const OP_LABEL: Record<string, string> = {
@@ -95,6 +99,9 @@ const ICONS = {
   manage: <><path d="M20 7h-9" /><path d="M14 17H5" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></>,
   close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
   cloud: <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />,
+  refresh: <><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></>,
+  external: <><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></>,
+  plug: <><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" /></>,
 };
 
 function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof ICONS; className?: string }) {
@@ -175,6 +182,13 @@ function StateBadge({ identity, pending }: { identity: Identity | null | undefin
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }
 
+/** Plugin actions reject with plain `{ code, message }` objects, not `Error`s. */
+function errorText(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object" && typeof (e as { message?: unknown }).message === "string") return (e as { message: string }).message;
+  return String(e);
+}
+
 // ------------------------------------------------------------------ slot exports
 
 /** Agent detail tab (rendered by Paperclip releases after 2026.1023.0). */
@@ -230,6 +244,7 @@ export function IdentitiesPage({ context }: PluginPageProps) {
               <th className="px-3 py-2 font-medium">Nextcloud user</th>
               <th className="px-3 py-2 font-medium">Email</th>
               <th className="px-3 py-2 font-medium">ID</th>
+              <th className="px-3 py-2 font-medium">MCP</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -245,6 +260,15 @@ export function IdentitiesPage({ context }: PluginPageProps) {
                 <td className="px-3 py-2">
                   <StateBadge identity={a.identity} pending={a.pending} />
                 </td>
+                <td className="px-3 py-2">
+                  {a.mcpConnected ? (
+                    <span title="Connected to the Nextcloud MCP server in Paperclip" aria-label="MCP connected" className="inline-flex text-emerald-700 dark:text-emerald-400">
+                      <Icon name="plug" />
+                    </span>
+                  ) : (
+                    <span className={muted}>—</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-right">
                   <IconButton
                     icon={selected === a.id ? "close" : "manage"}
@@ -256,7 +280,7 @@ export function IdentitiesPage({ context }: PluginPageProps) {
             ))}
             {data.agents.length === 0 && (
               <tr>
-                <td colSpan={5} className={`px-3 py-6 text-center ${muted}`}>
+                <td colSpan={6} className={`px-3 py-6 text-center ${muted}`}>
                   No agents in this company yet.
                 </td>
               </tr>
@@ -299,6 +323,7 @@ function IdentityPanel({ agentId, companyId, onChange }: { agentId: string; comp
     reveal: usePluginAction("reveal"),
   };
   const busy = !!data?.pending;
+  const mcp = useMcpConnection(data, agentId, companyId, refresh, onChange);
 
   // Poll while an operation runs in the background; tell the page when it finishes.
   useEffect(() => {
@@ -312,11 +337,13 @@ function IdentityPanel({ agentId, companyId, onChange }: { agentId: string; comp
 
   async function run(op: Exclude<keyof typeof actions, "reveal">, params: Record<string, unknown> = {}) {
     try {
+      // A purged ID's connection would point at a deleted user: remove it first.
+      if (op === "purge") await mcp.remove();
       await actions[op]({ agentId, companyId, ...params });
       refresh();
       onChange?.();
     } catch (e) {
-      toast({ title: "Action failed", body: e instanceof Error ? e.message : String(e), tone: "error" });
+      toast({ title: "Action failed", body: errorText(e), tone: "error" });
     }
   }
 
@@ -326,7 +353,7 @@ function IdentityPanel({ agentId, companyId, onChange }: { agentId: string; comp
       await copyTextToClipboard(res.value);
       toast({ title: `${what} copied`, tone: "success", ttlMs: 2500 });
     } catch (e) {
-      toast({ title: "Copy failed", body: e instanceof Error ? e.message : String(e), tone: "error" });
+      toast({ title: "Copy failed", body: errorText(e), tone: "error" });
     }
   }
 
@@ -353,9 +380,12 @@ function IdentityPanel({ agentId, companyId, onChange }: { agentId: string; comp
       {!data.identity && !busy ? (
         <CreateForm data={data} busy={busy} onCreate={(p) => run("provision", p)} />
       ) : data.identity?.state === "disabled" ? (
-        <DisabledCard identity={data.identity} busy={busy} onEnable={() => run("enable")} onPurge={() => run("purge")} />
+        <>
+          <DisabledCard identity={data.identity} busy={busy} onEnable={() => run("enable")} onPurge={() => run("purge")} />
+          <McpCard data={data} mcp={mcp} busy={busy} />
+        </>
       ) : data.identity ? (
-        <ActiveCards data={data} identity={data.identity} busy={busy} run={run} copy={copy} />
+        <ActiveCards data={data} identity={data.identity} busy={busy} run={run} copy={copy} mcp={mcp} />
       ) : null}
     </div>
   );
@@ -431,8 +461,9 @@ function ActiveCards(props: {
   busy: boolean;
   run: (op: "provision" | "disable" | "rotate", p?: Record<string, unknown>) => Promise<void>;
   copy: (kind: string, what: string) => Promise<void>;
+  mcp: McpConnection;
 }) {
-  const { data, identity: id, busy, run, copy } = props;
+  const { data, identity: id, busy, run, copy, mcp } = props;
   const [shared, setShared] = useState<string[]>(id.sharedMailboxes);
   const [confirm, setConfirm] = useState(false);
   useEffect(() => setShared(id.sharedMailboxes), [id.sharedMailboxes.join(",")]);
@@ -479,27 +510,7 @@ function ActiveCards(props: {
         <Secret label="MCP app password" copyLabel="MCP app password" hint={c.mcpAppPassword} onCopy={() => copy("mcpAppPassword", "MCP app password")} />
       </Card>
 
-      <Card title="Connect Nextcloud MCP">
-        <p className={muted}>
-          The agent works in Nextcloud (Talk, Mail, Files, Calendar, Deck …) through the Nextcloud MCP server, as <span className={mono}>{id.nextcloudUser}</span>.
-        </p>
-        <Row label="Server URL">
-          {data.info?.mcpUrl ? (
-            <CopyValue value={data.info.mcpUrl} label="MCP server URL" onCopy={() => void copyTextToClipboard(data.info!.mcpUrl!)} />
-          ) : (
-            <span className={muted}>not set in the server's config (mcp.url)</span>
-          )}
-        </Row>
-        <Secret label="Authorization header" copyLabel="Authorization header" hint={c.mcpAuthorization} onCopy={() => copy("mcpAuthorization", "Authorization header")} />
-        <ol className={`list-decimal pl-5 ${muted}`}>
-          <li>Connectors → Custom remote MCP: paste the server URL.</li>
-          <li>
-            Advanced authentication: header <span className={mono}>Authorization</span>, paste the header value.
-          </li>
-          <li>Name it "Nextcloud ({id.nextcloudUser})" and grant it to this agent only.</li>
-          <li>After "Rotate credentials", paste the new header value into the connection.</li>
-        </ol>
-      </Card>
+      <McpCard data={data} mcp={mcp} busy={busy} />
 
       <Card title="Delete Nextcloud ID" tone="danger">
         <p className={muted}>
@@ -557,6 +568,152 @@ function DisabledCard(props: { identity: Identity; busy: boolean; onEnable: () =
         </Button>
       </div>
       <p className={muted}>Purge deletes the Nextcloud user with its files, the mailbox with its mail, and the stored credentials. It cannot be undone.</p>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------------ the MCP connection
+
+interface McpConnection {
+  result: SyncResult | null;
+  error: string | null;
+  syncing: boolean;
+  resync: () => void;
+  /** Removes the connection and its secret; called before a purge. */
+  remove: () => Promise<void>;
+}
+
+/**
+ * Keeps the agent's Paperclip MCP connection in line with its identity (see mcp-connection.ts).
+ * Runs in the signed-in user's session whenever the panel shows a settled identity.
+ */
+function useMcpConnection(
+  data: IdentityData | null | undefined,
+  agentId: string,
+  companyId: string | null,
+  refresh: () => void,
+  onChange?: () => void,
+): McpConnection {
+  const reveal = usePluginAction("reveal");
+  const record = usePluginAction("recordConnection");
+  const api = useMemo(() => restApi(), []);
+  const [result, setResult] = useState<SyncResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  const running = useRef(false);
+  const again = useRef(false);
+  const latest = useRef(data);
+  latest.current = data;
+
+  const bridge: Bridge = useMemo(
+    () => ({
+      revealHeader: async () => ((await reveal({ agentId, companyId, kind: "mcpAuthorization", purpose: "connection" })) as { value: string }).value,
+      record: async (connection) => {
+        await record({ agentId, companyId, connection });
+      },
+    }),
+    [reveal, record, agentId, companyId],
+  );
+
+  // Only a complete picture counts: an unreachable server is not "no identity".
+  const ready = !!data && !!companyId && data.configured && !data.error && !data.pending && data.identity !== undefined;
+  const key = ready
+    ? JSON.stringify([data.identity?.state ?? null, data.identity?.nextcloudUser ?? null, data.info?.mcpUrl ?? null, data.credentialsUpdatedAt, !!data.connection])
+    : null;
+
+  useEffect(() => {
+    if (!key) return;
+    if (running.current) {
+      again.current = true;
+      return;
+    }
+    running.current = true;
+    setSyncing(true);
+    setError(null);
+    sync(api, agentState(latest.current!, agentId, companyId!), bridge)
+      .then((r) => {
+        setResult(r);
+        if (r.changes.length) {
+          refresh();
+          onChange?.();
+        }
+      })
+      .catch((e) => setError(errorText(e)))
+      .finally(() => {
+        running.current = false;
+        setSyncing(false);
+        if (again.current) {
+          again.current = false;
+          setNonce((n) => n + 1);
+        }
+      });
+  }, [key, nonce]);
+
+  const remove = useCallback(async () => {
+    const d = latest.current;
+    if (!d || !companyId) return;
+    await removeConnection(api, agentState(d, agentId, companyId), bridge);
+    setResult({ connection: null, note: null, changes: [] });
+  }, [api, bridge, agentId, companyId]);
+
+  return { result, error, syncing, resync: () => setNonce((n) => n + 1), remove };
+}
+
+/** Paperclip's connection health values that need no attention. */
+const HEALTH_FINE = new Set(["ok", "healthy", "unknown", "unchecked"]);
+
+function McpCard({ data, mcp, busy }: { data: IdentityData; mcp: McpConnection; busy: boolean }) {
+  const nav = useHostNavigation();
+  const c = mcp.result?.connection;
+  const [label, cls] = !c
+    ? ["", ""]
+    : !c.enabled
+      ? ["off", "bg-muted text-muted-foreground"]
+      : !c.healthStatus || HEALTH_FINE.has(c.healthStatus)
+        ? ["on", "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"]
+        : [c.healthStatus.replace(/_/g, " "), "bg-amber-500/15 text-amber-700 dark:text-amber-400"];
+  return (
+    <Card
+      title="MCP connection"
+      action={<IconButton icon="refresh" label="Check and repair the MCP connection" disabled={busy || mcp.syncing} onClick={mcp.resync} />}
+    >
+      <p className={muted}>
+        The agent works in Nextcloud (Talk, Mail, Files, Calendar …) through the Nextcloud MCP server, as{" "}
+        <span className={mono}>{data.identity?.nextcloudUser}</span>. Paperclip holds the credential and grants the tools to this agent only.
+      </p>
+      <Row label="Connection">
+        {c ? (
+          <>
+            <a {...nav.linkProps(`/apps/${c.id}`)} className="text-sm font-medium underline-offset-2 hover:underline">
+              {c.name}
+            </a>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
+          </>
+        ) : (
+          <span className={muted}>{mcp.syncing ? "setting up…" : (mcp.result?.note ?? "—")}</span>
+        )}
+      </Row>
+      {c?.healthMessage && !HEALTH_FINE.has(c.healthStatus ?? "") && (
+        <Row label="Health">
+          <span className="text-sm">{c.healthMessage}</span>
+        </Row>
+      )}
+      <Row label="Server URL">
+        <span className={mono}>{data.info?.mcpUrl ?? "not set in the server's config (mcp.url)"}</span>
+      </Row>
+      {c && (
+        <div>
+          <a
+            {...nav.linkProps(`/apps/${c.id}`)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            <Icon name="external" />
+            Tools and permissions
+          </a>
+        </div>
+      )}
+      {mcp.error && <p className="text-sm text-destructive">{mcp.error}</p>}
     </Card>
   );
 }

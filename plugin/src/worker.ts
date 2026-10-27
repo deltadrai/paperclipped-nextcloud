@@ -29,6 +29,8 @@ interface Config {
 }
 
 // The host allows 30 secret resolutions per minute per company. The rules that follow from it:
+// - resolved values are kept for a minute (`resolveSecret`), so panel loads, the MCP connection
+//   sync and actions share one resolution;
 // - an action resolves what it needs before it changes anything, so a refused resolution can
 //   never strand fresh credentials the server has already issued;
 // - the tab's data handler resolves nothing while an operation runs (that is when it polls), and
@@ -43,6 +45,13 @@ const credentialsKey = (companyId: string, agentId: string) => ({
   scopeId: companyId,
   namespace: NS,
   stateKey: `credentials:${agentId}`,
+});
+/** The agent's Paperclip MCP connection: ids only, maintained by the panel (see ui/mcp-connection). */
+const connectionKey = (companyId: string, agentId: string) => ({
+  scopeKind: "company" as const,
+  scopeId: companyId,
+  namespace: NS,
+  stateKey: `connection:${agentId}`,
 });
 const lastOpKey = (companyId: string, agentId: string) => ({
   scopeKind: "company" as const,
@@ -81,25 +90,57 @@ async function config(ctx: PluginContext, companyId: string): Promise<Config> {
   return (await ctx.config.get(companyId)) as Config;
 }
 
-/** One secret resolution. `null` when the plugin is not configured for this company. */
+/** Resolved secrets, per company and reference. A changed secret takes effect within a minute. */
+const resolved = new Map<string, { value: string; at: number }>();
+const SECRET_TTL_MS = 60_000;
+
+async function resolveSecret(ctx: PluginContext, companyId: string, ref: SecretRef, configPath: string): Promise<string> {
+  const key = `${companyId}/${configPath}/${JSON.stringify(ref)}`;
+  const hit = resolved.get(key);
+  if (hit && Date.now() - hit.at < SECRET_TTL_MS) return hit.value;
+  const value = await ctx.secrets.resolve(ref, { companyId, configPath });
+  resolved.set(key, { value, at: Date.now() });
+  return value;
+}
+
+/** `null` when the plugin is not configured for this company. */
 async function client(ctx: PluginContext, companyId: string): Promise<PcncClient | null> {
   const c = await config(ctx, companyId);
   if (!c.serverUrl || !c.apiToken) return null;
-  const token = await ctx.secrets.resolve(c.apiToken, { companyId, configPath: "apiToken" });
-  return new PcncClient(c.serverUrl, token);
+  return new PcncClient(c.serverUrl, await resolveSecret(ctx, companyId, c.apiToken, "apiToken"));
 }
 
-/** One secret resolution. */
 async function vaultKey(ctx: PluginContext, companyId: string): Promise<Buffer> {
   const c = await config(ctx, companyId);
   if (!c.credentialKey) throw new Error("The plugin's credential encryption key is not configured");
-  return deriveKey(await ctx.secrets.resolve(c.credentialKey, { companyId, configPath: "credentialKey" }));
+  return deriveKey(await resolveSecret(ctx, companyId, c.credentialKey, "credentialKey"));
 }
 
 async function requireAgent(ctx: PluginContext, agentId: string, companyId: string) {
   const agent = await ctx.agents.get(agentId, companyId);
   if (!agent) throw new Error("Agent not found in this company");
   return agent;
+}
+
+interface ConnectionRecord {
+  connectionId: string;
+  secretId: string;
+  syncedCredentialsAt: string | null;
+}
+
+async function storedConnection(ctx: PluginContext, companyId: string, agentId: string) {
+  return ((await ctx.state.get(connectionKey(companyId, agentId))) as ConnectionRecord | null) ?? null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function connectionRecord(v: unknown): ConnectionRecord | null {
+  if (v === null || v === undefined) return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.connectionId !== "string" || !UUID.test(r.connectionId)) throw new Error("connectionId must be a UUID");
+  if (typeof r.secretId !== "string" || !UUID.test(r.secretId)) throw new Error("secretId must be a UUID");
+  if (r.syncedCredentialsAt !== null && typeof r.syncedCredentialsAt !== "string") throw new Error("syncedCredentialsAt must be a string");
+  return { connectionId: r.connectionId, secretId: r.secretId, syncedCredentialsAt: r.syncedCredentialsAt as string | null };
 }
 
 async function storedCredentials(ctx: PluginContext, companyId: string, agentId: string) {
@@ -171,6 +212,7 @@ const plugin = definePlugin({
         lastOperation: ((await ctx.state.get(lastOpKey(companyId, agentId))) as LastOperation | null) ?? null,
         credentials: stored?.hints ?? {},
         credentialsUpdatedAt: stored?.updatedAt ?? null,
+        connection: await storedConnection(ctx, companyId, agentId),
       };
       // The tab polls while an operation runs: answer without touching secrets or the server.
       if (base.pending) return { ...base, configured: true, error: null, polling: true };
@@ -194,9 +236,19 @@ const plugin = definePlugin({
     ctx.data.register("overview", async (params) => {
       const companyId = str(params.companyId, "companyId");
       const agents = await ctx.agents.list({ companyId, limit: 500 });
+      const connected = new Set(
+        (await Promise.all(agents.map(async (a) => ((await storedConnection(ctx, companyId, a.id)) ? a.id : null)))).filter(Boolean),
+      );
       const rows = (identities: Map<string, unknown>) =>
         agents
-          .map((a) => ({ id: a.id, name: a.name, status: a.status, identity: identities.get(a.id) ?? null, pending: pending.get(a.id) ?? null }))
+          .map((a) => ({
+            id: a.id,
+            name: a.name,
+            status: a.status,
+            identity: identities.get(a.id) ?? null,
+            pending: pending.get(a.id) ?? null,
+            mcpConnected: connected.has(a.id),
+          }))
           .sort((x, y) => x.name.localeCompare(y.name));
       let c: PcncClient | null;
       try {
@@ -252,15 +304,34 @@ const plugin = definePlugin({
       if (!stored) throw new Error("No credentials stored for this agent");
       const key = await vaultKey(ctx, companyId);
       let value: string | null;
-      if (kind === "mcpAuthorization") {
-        const mcp = reveal(key, agentId, stored, "mcpAppPassword");
-        value = mcp && stored.user ? basicAuthorization(stored.user, mcp) : null;
-      } else {
-        value = reveal(key, agentId, stored, kind as CredentialKind);
+      try {
+        if (kind === "mcpAuthorization") {
+          const mcp = reveal(key, agentId, stored, "mcpAppPassword");
+          value = mcp && stored.user ? basicAuthorization(stored.user, mcp) : null;
+        } else {
+          value = reveal(key, agentId, stored, kind as CredentialKind);
+        }
+      } catch {
+        throw new Error(
+          "The stored credentials cannot be decrypted: the credential encryption key has changed. Rotate the credentials to store new ones.",
+        );
       }
       if (!value) throw new Error("No such credential stored for this agent");
-      ctx.logger.info(`credential ${kind} of agent ${agentId} revealed to user ${actx.actor.userId ?? "?"}`);
+      const purpose = params.purpose === "connection" ? " for its MCP connection" : "";
+      ctx.logger.info(`credential ${kind} of agent ${agentId} revealed to user ${actx.actor.userId ?? "?"}${purpose}`);
       return { value };
+    });
+
+    // The panel records which Paperclip secret and connection belong to the agent. Ids only.
+    ctx.actions.register("recordConnection", async (params, actx) => {
+      assertHumanCaller(actx);
+      const agentId = str(params.agentId, "agentId");
+      const companyId = str(actx.companyId ?? params.companyId, "companyId");
+      await requireAgent(ctx, agentId, companyId);
+      const rec = connectionRecord(params.connection);
+      if (rec) await ctx.state.set(connectionKey(companyId, agentId), rec);
+      else await ctx.state.delete(connectionKey(companyId, agentId));
+      return { ok: true };
     });
   },
 

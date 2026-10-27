@@ -933,7 +933,7 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "paperclipped-nextcloud"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -964,7 +964,7 @@ dependencies = [
 
 [[package]]
 name = "pcnc-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "pcnc-dms"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -997,7 +997,7 @@ dependencies = [
 
 [[package]]
 name = "pcnc-nextcloud"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",

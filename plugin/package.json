@@ -1,13 +1,28 @@
 {
   "name": "paperclipped-nextcloud",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Paperclip plugin: give agents their own Nextcloud user, mailbox and Nextcloud MCP access (needs the paperclipped-nextcloud server)",
   "license": "MIT",
   "type": "module",
-  "repository": { "type": "git", "url": "git+https://github.com/deltadrai/paperclipped-nextcloud.git", "directory": "plugin" },
-  "keywords": ["paperclip", "paperclip-plugin", "nextcloud", "docker-mailserver", "mcp"],
-  "files": ["dist", "README.md"],
-  "exports": { ".": "./dist/index.js" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deltadrai/paperclipped-nextcloud.git",
+    "directory": "plugin"
+  },
+  "keywords": [
+    "paperclip",
+    "paperclip-plugin",
+    "nextcloud",
+    "docker-mailserver",
+    "mcp"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "paperclipPlugin": {
     "manifest": "./dist/manifest.js",
     "worker": "./dist/worker.js",
@@ -30,6 +45,10 @@
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   },
-  "peerDependencies": { "react": ">=18" },
-  "engines": { "node": ">=24.11.0" }
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  }
 }

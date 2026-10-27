@@ -9,15 +9,16 @@ identity in your Nextcloud and on your mail server. Each digital worker gets:
 - optionally, access to **shared company mailboxes** (`contact@`, `info@`, …) in its Nextcloud
   Mail;
 - the group's **team folder** and **Talk lobby**, through group membership;
-- an **app password for the [Nextcloud MCP server](https://github.com/cbcoutinho/nextcloud-mcp-server)**,
-  which is how the agent works in Nextcloud, as itself.
+- a **Paperclip connection to the [Nextcloud MCP server](https://github.com/cbcoutinho/nextcloud-mcp-server)**
+  with its own app password, granted to that agent only: this is how the agent works in
+  Nextcloud, as itself. Its tools and permissions are managed in Paperclip.
 
 It has two parts:
 
 | Part | What it is |
 |---|---|
 | **Server** (`paperclipped-nextcloud`, Rust) | Runs next to your mail server and holds the privileged access. HTTP API and CLI. |
-| **Paperclip plugin** (npm `paperclipped-nextcloud`, [`plugin/`](plugin/README.md)) | A *Nextcloud identities* page (and, on newer Paperclip releases, a tab on each agent's page): create, delete (disable), re-enable, purge; masked credentials with copy; blocks deleting an agent until its ID is purged. |
+| **Paperclip plugin** (npm `paperclipped-nextcloud`, [`plugin/`](plugin/README.md)) | A *Nextcloud identities* page (and, on newer Paperclip releases, a tab on each agent's page): create, delete (disable), re-enable, purge; masked credentials with copy; the agent's MCP connection, set up and kept in line; blocks deleting an agent until its ID is purged. |
 
 ## Requirements
 
@@ -71,7 +72,7 @@ needs `Authorization: Bearer $PCNC_API_TOKEN`.
 ## Setup
 
 1. **Run a second nextcloud-mcp-server** in `multi_user_basic` mode, reachable only from
-   Paperclip.
+   Paperclip, and set its URL as `mcp.url`. The plugin connects each agent to it.
 2. **Configure.** Copy [`deploy/config.example.yaml`](deploy/config.example.yaml) and set these
    environment variables:
 

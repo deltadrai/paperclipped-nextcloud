@@ -7,8 +7,10 @@ Nextcloud. Each digital worker gets:
 - its own mailbox, set up in Nextcloud Mail;
 - optionally, shared company mailboxes;
 - the group's team folder and Talk lobby;
-- an app password for the
-  [Nextcloud MCP server](https://github.com/cbcoutinho/nextcloud-mcp-server).
+- a **Paperclip connection to the
+  [Nextcloud MCP server](https://github.com/cbcoutinho/nextcloud-mcp-server)** with its own
+  credentials, granted to that agent only. The agent works in Nextcloud as itself, and you manage
+  its tools and permissions in Paperclip.
 
 The plugin is the Paperclip side of
 [paperclipped-nextcloud](https://github.com/deltadrai/paperclipped-nextcloud). It needs that
@@ -34,16 +36,51 @@ The panel walks through the lifecycle:
 |---|---|
 | **Create Nextcloud ID** | Name (suggested from the agent's name), display name, and the shared mailboxes to grant. |
 | **Active** | Shared mailboxes are editable. The **credentials** (Nextcloud login password, MCP app password) are shown masked with a copy button. **Rotate credentials** issues new ones and revokes the old MCP password. |
-| **Connect Nextcloud MCP** | The MCP server URL and the agent's `Authorization` header, for a *Custom remote MCP* connection that you grant to that agent only. |
+| **MCP connection** | The agent's connection in Paperclip, its state, and a link to its tools and permissions. Set up and kept in line automatically (below). |
 | **Delete** | Disables the ID and keeps its data. From there, **Re-enable** or **Purge**; purge asks you to type the user name. |
 
 **Agents cannot be deleted while they still have an ID.** The plugin takes part in Paperclip's
 agent lifecycle: during `cleaning_up` it waits until the agent's ID is purged.
 
+## The MCP connection
+
+Creating an ID also connects the agent in Paperclip to the Nextcloud MCP server, as its own
+Nextcloud user:
+
+- a company secret *Nextcloud MCP (`<user>`)* holds the `Authorization` header;
+- a remote-MCP connection of the same name sends it, with MCP sessions on (the server requires
+  them);
+- the connection is granted **to that agent only**. Read and write tools start allowed;
+  destructive ones (deleting mail, files, events …) start as **ask first**. Change this in
+  Paperclip under the connection's tools and permissions, which the panel links to.
+
+The ID's lifecycle carries over:
+
+| ID action | Connection |
+|---|---|
+| Rotate credentials | The secret gets the new header |
+| Delete (disable) | Switched off |
+| Re-enable | Switched on |
+| Purge | Connection and secret deleted |
+
+**How it works.** Paperclip's plugin API cannot manage connections, but its REST API can, for a
+signed-in user. The panel therefore makes these calls in your browser session, exactly as
+Paperclip's own UI does, whenever it shows an agent. An interrupted setup is completed the next
+time you open the agent; the **Check and repair** button runs the same sync on demand.
+Consequences:
+
+- operations started in the panel sync the connection when they finish. Changes made outside
+  it, with the server's CLI for example, are synced the next time someone opens the agent in the
+  panel;
+- the user needs permission to manage Paperclip's tool connections;
+- **Paperclip only connects to private addresses** (a tailnet, a LAN) while its deployment
+  exposure is not `public`. If the MCP server is reachable only privately, as it should be, keep
+  Paperclip's exposure `private`.
+
 ## Install
 
 1. Run the [server](https://github.com/deltadrai/paperclipped-nextcloud#setup). Paperclip must
-   reach its HTTP API, and agents must reach the MCP server it points to (`mcp.url`).
+   reach its HTTP API and the MCP server it points to (`mcp.url`).
 2. In Paperclip, go to **Settings → Plugins → Install from npm** and enter
    `paperclipped-nextcloud@<version>`.
 3. Create two company secrets:
@@ -70,6 +107,9 @@ agent lifecycle: during `cleaning_up` it waits until the agent's ID is purged.
     every copy is logged.
   - The server never stores the login password. It keeps the MCP app password sealed, only so
     *Rotate* can revoke it.
+- **The MCP credential lives in a Paperclip secret.** The panel reads it through the *Copy*
+  path (a signed-in user only, logged as "for its MCP connection") and writes it into the
+  agent's secret. Paperclip's gateway, not the agent, sends it to the MCP server.
 - **The server URL is admin-configured.** The worker calls it with Node's own `fetch`, not the
   host's `ctx.http`. The host's SSRF guard refuses private address ranges, and this server
   usually sits on one. The URL comes from the plugin settings only, never from users or agents.
@@ -80,8 +120,8 @@ agent lifecycle: during `cleaning_up` it waits until the agent's ID is purged.
   until the mail server accepts the new mailbox. Operations therefore run in the background,
   and the panel polls. Every operation is idempotent: if one fails, run it again.
 - **Secret resolutions are rate-limited.** Paperclip allows 30 per minute per company. The
-  plugin resolves secrets only when an action starts or the panel first loads, never while
-  polling.
+  plugin keeps a resolved value for one minute and resolves nothing while polling. After you
+  change the API token or the credential key, allow a minute before it takes effect.
 - **The lifecycle hook gates every agent.** If the plugin is enabled but broken (for example,
   the server is unreachable), agents stay in `cleaning_up` and cannot be deleted. To proceed
   anyway, disable the plugin for that company.
@@ -93,7 +133,7 @@ agent lifecycle: during `cleaning_up` it waits until the agent's ID is purged.
 | Component | Version |
 |---|---|
 | Paperclip / `@paperclipai/plugin-sdk` | 2026.1023.0 |
-| paperclipped-nextcloud server | 0.1.x |
+| paperclipped-nextcloud server | 0.1.x (with `mcp.url` set for the MCP connection) |
 | Node (inside Paperclip) | ≥ 24.11 |
 
 ## Credits and trademarks
