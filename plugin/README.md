@@ -17,6 +17,40 @@ The plugin is the Paperclip side of
 project's **server**, which runs next to your mail server and Nextcloud and does the actual
 provisioning.
 
+## Prerequisites
+
+Think of this project as hiring AI agents like new employees: the server is the IT clerk that
+creates the mailbox, the Nextcloud account and the passwords, and this plugin is the counter
+in Paperclip where you press the buttons. Before any of that can happen, the company itself
+must already exist — none of these pieces is installed by this plugin:
+
+| Component | Tested with | Required? | Role |
+|---|---|---|---|
+| [Paperclip](https://github.com/paperclipai/paperclip) | 2026.1023.0 | Yes | The office: where the agents and this plugin run |
+| [Nextcloud](https://nextcloud.com) | 34.0.5 | Yes | Users, group, files, Talk, webmail |
+| Nextcloud **Mail** app | 5.12.5 | Yes | The workers' webmail |
+| Nextcloud **Talk** app (`spreed`) | 24.0.6 | Yes | The lobby |
+| Nextcloud **Team folders** app (`groupfolders`) | 22.0.6 | No | Team folder; without it, a plain folder shared to the group |
+| [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver) | v16.0.1 | Yes | The post office: Postfix and Dovecot in a container, holding the real mailboxes |
+| [nextcloud-mcp-server](https://github.com/cbcoutinho/nextcloud-mcp-server) | 0.198.3 | Yes | The interpreter: the agents' tools in Nextcloud. A separate `multi_user_basic` instance, never exposed publicly. |
+| paperclipped-nextcloud **server** | 0.2.x | Yes | The clerk: does the provisioning this plugin asks for |
+
+In short, before installing the plugin you need:
+
+- **Paperclip** installed and running, with Node ≥ 24.11 inside it; the users who manage
+  identities may manage Paperclip's tool connections; exposure `private` (Paperclip only
+  connects to private addresses while its exposure is not `public`).
+- **Nextcloud**: a server you administer, on a production database (PostgreSQL or MariaDB),
+  with the Mail, Talk and (optionally) Team folders apps enabled, and background jobs running.
+- **docker-mailserver** running the mail for a domain you control (MX records, TLS
+  certificates), with its config volume mounted read-write where the server runs.
+- **nextcloud-mcp-server** as a separate `multi_user_basic` instance, reachable from
+  Paperclip only.
+- **The server** running next to your mail server and reachable from Paperclip.
+
+The [server README](https://github.com/deltadrai/paperclipped-nextcloud#prerequisites-and-dependencies)
+explains all of it in detail, including who must be able to reach whom.
+
 ## What you get in Paperclip
 
 - **Nextcloud identities** in the sidebar: a company page listing every agent with its
@@ -133,7 +167,7 @@ Consequences:
 | Component | Version |
 |---|---|
 | Paperclip / `@paperclipai/plugin-sdk` | 2026.1023.0 |
-| paperclipped-nextcloud server | 0.1.x (with `mcp.url` set for the MCP connection) |
+| paperclipped-nextcloud server | 0.1.x or 0.2.x (with `mcp.url` set for the MCP connection) |
 | Node (inside Paperclip) | ≥ 24.11 |
 
 ## Credits and trademarks

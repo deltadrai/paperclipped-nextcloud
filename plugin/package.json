@@ -1,6 +1,6 @@
 {
   "name": "paperclipped-nextcloud",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Paperclip plugin: give agents their own Nextcloud user, mailbox and Nextcloud MCP access (needs the paperclipped-nextcloud server)",
   "license": "MIT",
   "type": "module",

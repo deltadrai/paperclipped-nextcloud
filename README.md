@@ -20,17 +20,95 @@ It has two parts:
 | **Server** (`paperclipped-nextcloud`, Rust) | Runs next to your mail server and holds the privileged access. HTTP API and CLI. |
 | **Paperclip plugin** (npm `paperclipped-nextcloud`, [`plugin/`](plugin/README.md)) | A *Nextcloud identities* page (and, on newer Paperclip releases, a tab on each agent's page): create, delete (disable), re-enable, purge; masked credentials with copy; the agent's MCP connection, set up and kept in line; blocks deleting an agent until its ID is purged. |
 
-## Requirements
+## The big picture
 
-| Component | Tested with | Role |
-|---|---|---|
-| [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver) | v16.0.1 | Mail. The server edits DMS's config volume, as `setup email …` does. |
-| Nextcloud | 34.0.5 | Users, group, files |
-| Nextcloud Mail | 5.12.5 | The workers' webmail |
-| Nextcloud Talk | 24.0.6 | The lobby |
-| Team folders (`groupfolders`) | 22.0.6 | Optional; without it, a folder shared to the group |
-| nextcloud-mcp-server | 0.198.3 | A **separate instance** in `MCP_DEPLOYMENT_MODE=multi_user_basic`, never exposed publicly |
-| Paperclip | 2026.1023.0 | The plugin |
+This project hires AI agents as if they were new employees. When a new person joins a company,
+someone in IT creates their mail account and their intranet login, and hands over the
+passwords. That is this project's job — for the digital workers you run in Paperclip. But
+before the new-hire paperwork can happen, the company itself must already exist, with four
+buildings in place:
+
+- **Paperclip** is the office building: your AI agents live and work there.
+- **Nextcloud** is the company's own intranet: files, chat, calendar and a webmail app, all
+  self-hosted — like running your own private Google Workspace.
+- **docker-mailserver** is the post office: it receives, stores and hands out real email for
+  your domain. Inside it, Postfix takes the mail in, and Dovecot hands it out over IMAP.
+- **nextcloud-mcp-server** is the interpreter. MCP is the standard plug AI agents use for
+  tools; this server translates between an agent and Nextcloud, so the agent can read mail,
+  chat and manage files *as itself*.
+
+This project is the IT clerk, in two parts. The **server** does the privileged paperwork:
+it creates the mailbox at the post office, the user account in the intranet, and hands out
+the passwords. The **plugin** is the counter inside the Paperclip office: buttons to hire
+(create an identity), let go (disable), rehire (re-enable) and erase (purge) — and it wires
+each agent to the interpreter, so the agent gets its own hands in Nextcloud.
+
+The order matters: the office, the intranet, the post office and the interpreter must all be
+running *first*. This tool connects them; it does not install any of them.
+
+## Prerequisites and dependencies
+
+Everything here must already be set up and working before this plugin makes sense. Nothing
+below is installed by this project; `spike/up.sh` is the only place a full stack is wired up,
+and only for testing. The versions are what this project was tested with.
+
+| Component | Tested with | Required? | Role |
+|---|---|---|---|
+| [Paperclip](https://github.com/paperclipai/paperclip) | 2026.1023.0 | Yes | The office: where the agents and the plugin run |
+| [Nextcloud](https://nextcloud.com) | 34.0.5 | Yes | Users, group, files, Talk, webmail |
+| Nextcloud **Mail** app | 5.12.5 | Yes | The workers' webmail |
+| Nextcloud **Talk** app (`spreed`) | 24.0.6 | Yes | The lobby |
+| Nextcloud **Team folders** app (`groupfolders`) | 22.0.6 | No | Team folder; without it, a plain folder shared to the group |
+| [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver) | v16.0.1 | Yes | Mail: Postfix and Dovecot in a container. The server edits DMS's config volume, as `setup email …` does. |
+| [nextcloud-mcp-server](https://github.com/cbcoutinho/nextcloud-mcp-server) | 0.198.3 | Yes | The interpreter: the agents' tools in Nextcloud. A **separate instance** in `MCP_DEPLOYMENT_MODE=multi_user_basic`, never exposed publicly. |
+| paperclipped-nextcloud **server** | 0.2.0 | Yes | The clerk: this repo's Rust server. Container `ghcr.io/deltadrai/paperclipped-nextcloud` (a static binary on an empty base — no OS packages at all) or the same binary built from source. |
+
+What "working" means, per piece:
+
+**Paperclip**
+
+- Installed and running, with the agents you want to give identities.
+- Node ≥ 24.11 inside it: Paperclip runs the plugin with its embedded Node.
+- Users who manage identities may manage Paperclip's tool connections (the panel sets up each
+  agent's MCP connection in their browser session).
+- Exposure `private`, unless the MCP server is on a public address: Paperclip only connects
+  to private addresses while its exposure is not `public`.
+
+**Nextcloud**
+
+- A server you administer, on a production database (PostgreSQL or MariaDB; SQLite fell over
+  in the spike), with background jobs running — Mail's sync is a background job.
+- The **Mail**, **Talk** and (optionally) **Team folders** apps installed and enabled.
+- An **admin login** (name and password) for the one-time `bootstrap`.
+- Enforced two-factor authentication off for the provisioner user that `bootstrap` creates:
+  user management needs its login password, and app passwords are rejected there.
+
+**Mail (docker-mailserver)**
+
+- A mail **domain you control**: MX records pointing at the mail server and TLS certificates,
+  because agents' addresses are `name@your-domain`.
+- DMS's **config volume** mountable read-write wherever the paperclipped-nextcloud server runs;
+  its mail volume too, if `purge` should delete the mail.
+- At least one account seeded beforehand: DMS refuses to start with an empty
+  `postfix-accounts.cf`.
+- Every shared mailbox you want to hand out (`contact@`, …) a **real account with its own
+  password**: an alias cannot be shared as a mailbox.
+
+**nextcloud-mcp-server**
+
+- A second instance, `MCP_DEPLOYMENT_MODE=multi_user_basic`, pointed at your Nextcloud and
+  reachable from Paperclip only.
+
+**Who must be able to reach whom** (private addresses are the norm):
+
+```
+Paperclip ──HTTP──▶ paperclipped-nextcloud server    (the API, Bearer token)
+Paperclip ──HTTP──▶ nextcloud-mcp-server             (MCP: the agents' connection)
+server ──HTTPS──▶ Nextcloud                           (OCS API, as the sub-admin)
+server ──IMAP──▶ docker-mailserver                   (probes new mailbox passwords)
+server ──files──▶ DMS config volume                   (read-write, where it runs)
+Nextcloud Mail ──IMAP/SMTP──▶ docker-mailserver       (the workers' webmail)
+```
 
 Other mail servers can be added as backends: implement `pcnc_core::backend::MailBackend`.
 
@@ -71,6 +149,8 @@ needs `Authorization: Bearer $PCNC_API_TOKEN`.
 
 ## Setup
 
+With every [prerequisite](#prerequisites-and-dependencies) in place:
+
 1. **Run a second nextcloud-mcp-server** in `multi_user_basic` mode, reachable only from
    Paperclip, and set its URL as `mcp.url`. The plugin connects each agent to it.
 2. **Configure.** Copy [`deploy/config.example.yaml`](deploy/config.example.yaml) and set these
@@ -108,6 +188,8 @@ needs `Authorization: Bearer $PCNC_API_TOKEN`.
    ```
 
 ## Development
+
+You need Rust ≥ 1.85 and Node 24; the spike and the e2e tests need rootless `podman`.
 
 ```sh
 cargo test                          # server unit tests (engine against in-memory fakes, DMS files, registry, IMAP probe)
