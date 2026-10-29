@@ -236,58 +236,53 @@ export function IdentitiesPage({ context }: PluginPageProps) {
       </header>
       {!data.configured && <NotConfigured error={data.error} />}
       {data.configured && data.error && <div className="text-sm text-destructive">{data.error}</div>}
-      <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">Agent</th>
-              <th className="px-3 py-2 font-medium">Nextcloud user</th>
-              <th className="px-3 py-2 font-medium">Email</th>
-              <th className="px-3 py-2 font-medium">ID</th>
-              <th className="px-3 py-2 font-medium">MCP</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {data.agents.map((a) => (
-              <tr key={a.id} className={`border-t border-border ${selected === a.id ? "bg-accent/40" : ""}`}>
-                <td className="px-3 py-2">
+      {data.agents.length === 0 ? (
+        <p className={`rounded-lg border border-dashed border-border px-3 py-6 text-center ${muted}`}>No agents in this company yet.</p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {data.agents.map((a) => (
+            <section
+              key={a.id}
+              className={`flex flex-col gap-3 rounded-lg border p-4 ${selected === a.id ? "border-primary bg-accent/40" : "border-border"}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 truncate text-sm font-medium">
                   {a.name}
-                  {a.status === "terminated" && <span className="ml-2 text-xs text-muted-foreground">(terminated)</span>}
-                </td>
-                <td className={`px-3 py-2 ${mono}`}>{a.identity?.nextcloudUser ?? "—"}</td>
-                <td className={`px-3 py-2 ${mono}`}>{a.identity?.address ?? "—"}</td>
-                <td className="px-3 py-2">
-                  <StateBadge identity={a.identity} pending={a.pending} />
-                </td>
-                <td className="px-3 py-2">
-                  {a.mcpConnected ? (
-                    <span title="Connected to the Nextcloud MCP server in Paperclip" aria-label="MCP connected" className="inline-flex text-emerald-700 dark:text-emerald-400">
-                      <Icon name="plug" />
-                    </span>
-                  ) : (
-                    <span className={muted}>—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <IconButton
-                    icon={selected === a.id ? "close" : "manage"}
-                    label={selected === a.id ? "Close" : `Manage the Nextcloud ID of ${a.name}`}
-                    onClick={() => setSelected(selected === a.id ? null : a.id)}
-                  />
-                </td>
-              </tr>
-            ))}
-            {data.agents.length === 0 && (
-              <tr>
-                <td colSpan={6} className={`px-3 py-6 text-center ${muted}`}>
-                  No agents in this company yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  {a.status === "terminated" && <span className="ml-2 text-xs font-normal text-muted-foreground">(terminated)</span>}
+                </div>
+                <IconButton
+                  icon={selected === a.id ? "close" : "manage"}
+                  label={selected === a.id ? "Close" : `Manage the Nextcloud ID of ${a.name}`}
+                  onClick={() => setSelected(selected === a.id ? null : a.id)}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <StateBadge identity={a.identity} pending={a.pending} />
+                {a.mcpConnected ? (
+                  <span
+                    title="Connected to the Nextcloud MCP server in Paperclip"
+                    aria-label="MCP connected"
+                    className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400"
+                  >
+                    <Icon name="plug" className="h-3.5 w-3.5" />
+                    MCP connected
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">MCP not connected</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Nextcloud user</span>
+                <span className={`block truncate ${mono}`}>{a.identity?.nextcloudUser ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Email</span>
+                <span className={`block truncate ${mono}`}>{a.identity?.address ?? "—"}</span>
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
       {selected && (
         <div>
           <h2 className="mb-3 text-base font-semibold">{data.agents.find((a) => a.id === selected)?.name}</h2>
