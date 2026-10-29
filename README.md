@@ -61,7 +61,7 @@ and only for testing. The versions are what this project was tested with.
 | Nextcloud **Team folders** app (`groupfolders`) | 22.0.6 | No | Team folder; without it, a plain folder shared to the group |
 | [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver) | v16.0.1 | Yes | Mail: Postfix and Dovecot in a container. The server edits DMS's config volume, as `setup email …` does. |
 | [nextcloud-mcp-server](https://github.com/cbcoutinho/nextcloud-mcp-server) | 0.198.3 | Yes | The interpreter: the agents' tools in Nextcloud. A **separate instance** in `MCP_DEPLOYMENT_MODE=multi_user_basic`, never exposed publicly. |
-| paperclipped-nextcloud **server** | 0.2.0 | Yes | The clerk: this repo's Rust server. Container `ghcr.io/deltadrai/paperclipped-nextcloud` (a static binary on an empty base — no OS packages at all) or the same binary built from source. |
+| paperclipped-nextcloud **server** | 0.2.2 | Yes | The clerk: this repo's Rust server. Container `ghcr.io/deltadrai/paperclipped-nextcloud` (a static binary on an empty base — no OS packages at all) or the same binary built from source. |
 
 What "working" means, per piece:
 
