@@ -152,7 +152,10 @@ needs `Authorization: Bearer $PCNC_API_TOKEN`.
 With every [prerequisite](#prerequisites-and-dependencies) in place:
 
 1. **Run a second nextcloud-mcp-server** in `multi_user_basic` mode, reachable only from
-   Paperclip, and set its URL as `mcp.url`. The plugin connects each agent to it.
+   Paperclip, and set its URL as `mcp.url`. The plugin connects each agent to it. The connection
+   is created in a signed-in user's browser session the first time the agent is opened in the
+   *Nextcloud identities* panel, so an ID provisioned outside the panel (with the server's CLI,
+   for example) needs that one visit before the agent can use its Nextcloud tools.
 2. **Configure.** Copy [`deploy/config.example.yaml`](deploy/config.example.yaml) and set these
    environment variables:
 
