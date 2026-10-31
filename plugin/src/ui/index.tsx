@@ -223,6 +223,9 @@ export function IdentitiesPage({ context }: PluginPageProps) {
   if (loading && !data) return <div className={muted}>Loading…</div>;
   if (error && !data) return <div className="text-sm text-destructive">Could not load: {error.message}</div>;
   if (!data) return null;
+  // The MCP connection is created when a signed-in user opens the agent's panel; agents provisioned
+  // outside the panel (server CLI/API) still need that one visit.
+  const mcpMissing = data.agents.filter((a) => a.identity && !a.mcpConnected && !a.pending);
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
       <header>
@@ -236,6 +239,12 @@ export function IdentitiesPage({ context }: PluginPageProps) {
       </header>
       {!data.configured && <NotConfigured error={data.error} />}
       {data.configured && data.error && <div className="text-sm text-destructive">{data.error}</div>}
+      {data.configured && !data.error && mcpMissing.length > 0 && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          {mcpMissing.length === 1 ? "1 agent has" : `${mcpMissing.length} agents have`} a Nextcloud ID but no MCP connection yet:{" "}
+          <b>{mcpMissing.map((a) => a.name).join(", ")}</b>. Open its panel (Manage) as a signed-in user to set the connection up.
+        </div>
+      )}
       {data.agents.length === 0 ? (
         <p className={`rounded-lg border border-dashed border-border px-3 py-6 text-center ${muted}`}>No agents in this company yet.</p>
       ) : (
@@ -267,6 +276,15 @@ export function IdentitiesPage({ context }: PluginPageProps) {
                     <Icon name="plug" className="h-3.5 w-3.5" />
                     MCP connected
                   </span>
+                ) : a.identity && !a.pending ? (
+                  <Button
+                    variant="default"
+                    title="Open this agent's panel as a signed-in user: that sets up its MCP connection"
+                    onClick={() => setSelected(selected === a.id ? null : a.id)}
+                  >
+                    <Icon name="plug" className="h-3.5 w-3.5" />
+                    Set up MCP
+                  </Button>
                 ) : (
                   <span className="text-xs text-muted-foreground">MCP not connected</span>
                 )}
@@ -686,7 +704,14 @@ function McpCard({ data, mcp, busy }: { data: IdentityData; mcp: McpConnection; 
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
           </>
         ) : (
-          <span className={muted}>{mcp.syncing ? "setting up…" : (mcp.result?.note ?? "—")}</span>
+          <span className={muted}>
+            {mcp.syncing
+              ? "setting up…"
+              : (mcp.result?.note ??
+                (data.identity
+                  ? "Not set up yet: the connection is created here when a signed-in user opens this panel."
+                  : "—"))}
+          </span>
         )}
       </Row>
       {c?.healthMessage && !HEALTH_FINE.has(c.healthStatus ?? "") && (

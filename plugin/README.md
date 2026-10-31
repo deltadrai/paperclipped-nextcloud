@@ -103,6 +103,11 @@ Paperclip's own UI does, whenever it shows an agent. An interrupted setup is com
 time you open the agent; the **Check and repair** button runs the same sync on demand.
 Consequences:
 
+- the connection is created the first time a signed-in user opens the agent's panel. An ID
+  provisioned outside the panel (with the server's CLI, for example) therefore still needs that
+  one visit before the agent can use its Nextcloud tools; the *Nextcloud identities* page lists
+  such agents with a **Set up MCP** button. On Paperclip 2026.1023.0 the agent detail tab is not
+  rendered yet, so the company page's panel is the place;
 - operations started in the panel sync the connection when they finish. Changes made outside
   it, with the server's CLI for example, are synced the next time someone opens the agent in the
   panel;
