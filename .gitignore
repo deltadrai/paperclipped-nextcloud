@@ -2,3 +2,6 @@
 node_modules/
 dist/
 spike/.env
+
+# Pi harness local state, never commit
+.pi/
